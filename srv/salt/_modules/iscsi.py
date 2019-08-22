@@ -282,6 +282,27 @@ class CephIscsiConfig(object):
             portal_config['inactive_portal_ips'] = inactive_portal_ips
             portal_config['tpgs'] = len(target_config['ip_list'])
 
+    def add_portal_auth(self, target_iqn, portal_name,
+                        userid, password, mutual_userid,
+                        mutual_password, authenticate_target):
+        log.debug('Adding portal auth for %s / %s', target_iqn, portal_name)
+        auth = {
+                    'username': userid,
+                    'password': password,
+                    'password_encryption_enabled': False,
+                    'mutual_username': mutual_userid,
+                    'mutual_password': mutual_password,
+                    'mutual_password_encryption_enabled': False,
+                    'authenticate_target': authenticate_target
+        }
+        target_config = self.config['targets'][target_iqn]
+        portal_config = target_config['portals'][portal_name]
+        if 'auth' in portal_config.keys():
+            if portal_config['auth'] != auth:
+                raise Exception("{} portal {} auth settings not uniform across all TPGs".format(target_iqn, portal_name))
+        else:
+            portal_config['auth'] = auth
+
     def _get_owner(self, target_iqn):
         target_config = self.config['targets'][target_iqn]
         owner = None
@@ -472,6 +493,13 @@ def generate_config(lio_root, pool_name):
                     if portal_name:
                         ceph_iscsi_config.add_portal(target.wwn, portal_name,
                                                      network_portal.ip_address)
+                        # XXX TODO if tpg.get_attribute('authentication'):
+                        ceph_iscsi_config.add_portal_auth(target.wwn, portal_name,
+                                            tpg.chap_userid,
+                                            tpg.chap_password,
+                                            tpg.chap_mutual_userid,
+                                            tpg.chap_mutual_password,
+                                            tpg.authenticate_target)
                 if len(list(target.tpgs)) == ceph_iscsi_config.get_tpgs(target.wwn):
                     disks_by_lun = {}
                     for lun in tpg.luns:
